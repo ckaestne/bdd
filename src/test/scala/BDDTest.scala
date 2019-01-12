@@ -42,8 +42,8 @@ class BDDTest extends FunSuite {
 
     val rebuilt = f.build(b2)
 
-    println(b2)
-    println(rebuilt)
+    //    println(b2)
+    //    println(rebuilt)
 
     assert(rebuilt.v==v1)
 
@@ -58,15 +58,15 @@ class BDDTest extends FunSuite {
     val b2 = f.feature("b")
 
     val b1AndB2 = f.apply(f.AND, b1, b2)
-    println(b1AndB2)
+    //    println(b1AndB2)
     assert(b1AndB2 == f.mk(b1.v, f.FALSE, f.mk(b2.v, f.FALSE, f.TRUE)))
 
     val b1OrB2 = f.apply(f.OR, b1, b2)
-    println(b1OrB2)
+    //    println(b1OrB2)
     assert(b1OrB2 == f.mk(b1.v, f.mk(b2.v, f.FALSE, f.TRUE), f.TRUE))
 
     val b1OrB2Not = b1OrB2.not()
-    println(b1OrB2Not)
+    //    println(b1OrB2Not)
     assert(b1OrB2Not == f.mk(b1.v, f.mk(b2.v, f.TRUE, f.FALSE), f.FALSE))
   }
 

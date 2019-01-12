@@ -65,8 +65,8 @@ package fosd.net.bdd {
 
     property("isSatisfiable") = Prop.forAll((a: (BDD, FeatureExpr)) => a._1.isSatisfiable == a._2.isSatisfiable())
     property("same print") = Prop.forAll((a: (BDD, FeatureExpr)) => {
-      println(a._1)
-      println(a._2)
+      //      println(a._1)
+      //      println(a._2)
       a._1.toString.replace("false","").replace("true","<>") == BDDHelper.getBDD(a._2.asInstanceOf[BDDFeatureExpr]).toString()
     })
     //  property("and1") = Prop.forAll((a: (BDD, FeatureExpr)) => a._1.toString==a._2.toString())
