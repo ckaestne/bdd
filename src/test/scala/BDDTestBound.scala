@@ -1,11 +1,11 @@
 package fosd.net.bdd
+
 import org.scalatest.FunSuite
 
 /**
   * Created by ckaestne on 6/18/2016.
   */
 class BDDTestBound extends FunSuite {
-
 
 
   test("mk") {
@@ -57,7 +57,6 @@ class BDDTestBound extends FunSuite {
     assert((a or b or c) == ((a and b.not and c.not) or (a.not and b and c.not) or (a.not and b.not and c)))
 
 
-
   }
 
   test("bounding 2") {
@@ -72,47 +71,144 @@ class BDDTestBound extends FunSuite {
   }
 
 
-//  trait Expr {
-//    def mkBdd(factory: BDDFactory): BDD
-//  }
-//  case class And(a: Expr, b: Expr) extends Expr{
-//    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory) and b.mkBdd(factory)
-//  }
-//  case class Or(a: Expr, b: Expr) extends Expr{
-//    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory) or b.mkBdd(factory)
-//  }
-//  case class Not(a: Expr) extends Expr{
-//    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory).not
-//  }
-//  case class Var(s: String) extends Expr{
-//    override def mkBdd(factory: BDDFactory): BDD = factory.feature(s)
-//  }
+  trait Expr {
+    def mkBdd(factory: BDDFactory): BDD
+
+    def eval(assignment: Config): Boolean
+  }
+
+  case class And(a: Expr, b: Expr) extends Expr {
+    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory) and b.mkBdd(factory)
+
+    override def eval(assignment: Config): Boolean = a.eval(assignment) && b.eval(assignment)
+  }
+
+  case class Or(a: Expr, b: Expr) extends Expr {
+    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory) or b.mkBdd(factory)
+
+    override def eval(assignment: Config): Boolean = a.eval(assignment) || b.eval(assignment)
+  }
+
+  case class Not(a: Expr) extends Expr {
+    override def mkBdd(factory: BDDFactory): BDD = a.mkBdd(factory).not
+
+    override def eval(assignment: Config): Boolean = !a.eval(assignment)
+  }
+
+  case class Var(s: String) extends Expr {
+    override def mkBdd(factory: BDDFactory): BDD = factory.feature(s)
+
+    override def eval(assignment: Config): Boolean = assignment contains this
+  }
+
+  val vars = List("a", "b", "c", "d").map(Var.apply)
+  val exprs: List[Expr] = {
+    var e1 = vars ++ vars.map(Not.apply)
+
+    var e2 = (for (a <- e1; b <- e1) yield And(a, b) :: Or(a, b) :: Nil).flatten
+    var e3 = (for (a <- e2; b <- e2) yield And(a, b) :: Or(a, b) :: Nil).flatten
+    var e4 = e3 ++ e3.map(Not.apply)
+    var e5 = (for (a <- e4; b <- e1) yield And(a, b) :: Or(a, b) :: Nil).flatten
+
+    e5
+  }
+  type Config = Set[Var]
+  type ConfigInt = Set[Int]
+  val configs: List[Config] = for (a <- List(Set[Var](), Set(vars(0)));
+                                   b <- List(Set[Var](), Set(vars(1)));
+                                   c <- List(Set[Var](), Set(vars(2)));
+                                   d <- List(Set[Var](), Set(vars(3)))) yield a ++ b ++ c ++ d
+
+  //evaluate a bdd for a given assignment
+  def eval(f: BDDFactory, bdd: BDD, assignment: ConfigInt): Boolean =
+    if (bdd == f.FALSE) false
+    else if (bdd == f.TRUE) true
+    else if (assignment contains bdd.v)
+      eval(f, bdd.high, assignment)
+    else
+      eval(f, bdd.low, assignment)
+
+
+  test("bdd always evaluates to correct value within bound") {
+    for (bound <- List(1, 2, 3, 4)) {
+      println(s"checking bound $bound")
+
+      for (e <- exprs) {
+        checkExprEval(e, bound)
+      }
+    }
+  }
+
+  private def checkExprEval(e: Expr, bound: Int): Unit = {
+    val f = new BDDFactory(bound)
+    val bdd = e.mkBdd(f)
+    //check all configs within bound
+    for (config <- configs; if config.size <= bound) {
+      val configInt = config.map(v => f.feature(v.s).v)
+      assert(eval(f, bdd, configInt) == e.eval(config), s"$bdd != $e for assignment $config")
+    }
+  }
+
+
+  //set of all assignments (within bounds) that evaluate to true
+  type TruthTable = Set[Config]
+
+
+  test("all expressions with same truth table within bound share exactly same bdd structure") {
+    for (bound <- List(1, 2, 3, 4)) {
+      println(s"checking bound $bound")
+      val f = new BDDFactory(bound)
+      var repr: Map[TruthTable, (Expr, BDD)] = Map()
+
+      for (e <- exprs) {
+
+        val bdd = e.mkBdd(f)
+        //check all configs within bound
+        var truthTable: TruthTable = Set()
+        for (config <- configs; if config.size <= bound) {
+          val configInt = config.map(v => f.feature(v.s).v)
+          if (eval(f, bdd, configInt))
+            truthTable += config
+        }
+
+        val existingRepr = repr.get(truthTable)
+        if (existingRepr.isDefined)
+          assert(existingRepr.get._2 == bdd, s"prior different representation for $truthTable, \nwas ${existingRepr.get._2} for ${existingRepr.get._1}, \nnow $bdd for $e")
+        repr += (truthTable -> (e, bdd))
+      }
+    }
+  }
 //
-//  val exprs: List[Expr] = {
-//    val vars = List("a","b","c","d").map(Var.apply)
-//    var e1 = vars ++ vars.map(Not.apply)
+//  test("t") {
+//    val bound = 1
+//    val f = new BDDFactory(bound)
+//    val a = "a"
+//    val b = "b"
+//    val x = Or(Var(a), Or(Var(b), Or(Not(Var("c")), Var("d"))))
 //
-//    var e2 = (for (a<-e1; b<-e1) yield And(a, b) :: Or(a, b)::Nil).flatten
-//    var e3 = (for (a<-e2; b<-e2) yield And(a, b) :: Or(a, b)::Nil).flatten
-//    var e4 = e3 ++ e3.map(Not.apply)
-//    var e5  = (for (a<-e4; b<-e1) yield And(a, b) :: Or(a, b)::Nil).flatten
+//    val y = Or(Or(And(Var(a), Var(a)), Or(Var(a), Var(a))), Not(Var(b)))
+//    val z = Or(And(And(Var(a), Var(a)), And(Var(a), Var(b))), Not(Var(b)))
 //
-//    println(e5.size)
-//    e5.take(100).foreach(println)
+//    println(f.printDot(y.mkBdd(f)))
+//    println(f.printDot(z.mkBdd(f)))
 //
 //
-//
-//  }
-//
-//  test("mkbdd bound 1") {
-//    val f = new BDDFactory(1)
-//
-//    for (e<-exprs) {
-//      val bdd = e.mkBdd(f)
+//    val bdd = x.mkBdd(f)
+//    var truthTable: TruthTable = Set()
+//    for (config <- configs; if config.size <= bound) {
+//      val configInt = config.map(v => f.feature(v.s).v)
+//      if (eval(f, bdd, configInt))
+//        truthTable += config
 //    }
+//
+//    println(truthTable)
+//    println(f.printDot(bdd))
+//    println(bdd)
+//    //   val y = And(And(And(Var(a),Var(a)),And(Var(a),Var(a))),Var(b))
+//    //
+//    //   println(x.mkBdd(f))
+//    //   println(y.mkBdd(f))
 //  }
-
-
 
 
 }

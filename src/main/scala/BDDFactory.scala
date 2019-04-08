@@ -22,7 +22,7 @@ class BDDFactory(bound: Int) {
   private val notCache: mutable.WeakHashMap[BDD, WeakReference[BDD]] = new mutable.WeakHashMap()
 
 
-  private var features: mutable.Map[String, Int] = mutable.Map()
+  private[bdd] var features: mutable.Map[String, Int] = mutable.Map()
   def varNum = features.size
 
   private def getFeatureId(s: String) =
