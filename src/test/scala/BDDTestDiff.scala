@@ -12,7 +12,7 @@ package fosd.net.bdd {
 
   class BDDTestDiff extends Properties("BDD") {
 
-    val bddFactory: BDDFactory = new BDDFactory()
+    val bddFactory: BDDFactory = new BDDFactory(100)
     bddFactory.feature("x")
     FeatureExprFactory.setDefault(FeatureExprFactory.bdd)
 

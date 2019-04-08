@@ -4,7 +4,7 @@ import scala.collection.immutable.Queue
 import scala.collection.mutable
 import scala.ref.WeakReference
 
-class BDDFactory {
+class BDDFactory(bound: Int) {
 
 
   val TRUE = new BDD(-1, null, null, this) {
@@ -54,6 +54,7 @@ class BDDFactory {
     override def apply(a: Boolean, b: Boolean) = a || b
   }
 
+
   private def lookupCache[K, V<:AnyRef](cache: mutable.WeakHashMap[K, WeakReference[V]], k: K, gen: => V): V = {
     val v = cache.get(k).flatMap(_.get)
     if (v.isDefined) v.get
@@ -65,56 +66,59 @@ class BDDFactory {
   }
 
   def apply(op: Op, u1: BDD, u2: BDD) = lookupCache(opCache, (op, u1, u2), {
-    var cache: Map[(BDD, BDD), BDD] = Map()
+    var cache: Map[(Int, BDD, BDD), BDD] = Map()
 
-    def app(u1: BDD, u2: BDD): BDD = {
-      val cached = cache.get((u1, u2))
+    def app(depth: Int, u1: BDD, u2: BDD): BDD = {
+      val cached = cache.get((depth, u1, u2))
       if (cached.nonEmpty)
         return cached.get
+
+      def mk_(v: Int, low: ()=>BDD, high: ()=>BDD): BDD =
+        if (depth==0) low() else mk(v, low(), high())
 
       val u =
         if (isTerminal(u1) && isTerminal(u2))
           if (op(u1 eq TRUE, u2 eq TRUE)) TRUE else FALSE
         else if (isTerminal(u2))
-          mk(u1.v, app(u1.low, u2), app(u1.high, u2))
+          mk_(u1.v, ()=>app(depth, u1.low, u2), ()=>app(depth-1, u1.high, u2))
         else if (isTerminal(u1))
-          mk(u2.v, app(u1, u2.low), app(u1, u2.high))
+          mk_(u2.v, ()=>app(depth, u1, u2.low), ()=>app(depth-1, u1, u2.high))
         else if (u1.v < u2.v)
-          mk(u1.v, app(u1.low, u2), app(u1.high, u2))
+          mk_(u1.v, ()=>app(depth,u1.low, u2), ()=>app(depth-1,u1.high, u2))
         else if (u1.v > u2.v)
-          mk(u2.v, app(u1, u2.low), app(u1, u2.high))
+          mk_(u2.v, ()=>app(depth,u1, u2.low), ()=>app(depth-1,u1, u2.high))
         else //if (u1.v==u2.v)
-          mk(u1.v, app(u1.low, u2.low), app(u1.high, u2.high))
+          mk_(u1.v, ()=>app(depth,u1.low, u2.low), ()=>app(depth-1,u1.high, u2.high))
 
-      cache += ((u1, u2) -> u)
+      cache += ((depth, u1, u2) -> u)
       u
     }
 
-    app(u1, u2)
+    app(bound, u1, u2)
   })
 
 
 
 
 
-  def build(t: BDD) = {
-    build_(t, 0)
-  }
-
-  private def build_(t: BDD, v: Int): BDD =
-    if ((v >= features.size) || (t eq TRUE) || (t eq FALSE)) t
-    else {
-      val b0 = build_(sub(t, v, false), v + 1)
-      val b1 = build_(sub(t, v, true), v + 1)
-      mk(v, b0, b1)
-    }
-
-  def sub(bdd: BDD, v: Int, byTrue: Boolean): BDD = if ((bdd eq TRUE) || (bdd eq FALSE)) bdd
-  else if (bdd.v == v) {
-    if (byTrue) bdd.high else bdd.low
-  } else mk(bdd.v, sub(bdd.low, v, byTrue), sub(bdd.high, v, byTrue))
-
-
+//  def build(t: BDD) = {
+//    build_(t, 0)
+//  }
+//
+//  private def build_(t: BDD, v: Int): BDD =
+//    if ((v >= features.size) || (t eq TRUE) || (t eq FALSE)) t
+//    else {
+//      val b0 = build_(sub(t, v, false), v + 1)
+//      val b1 = build_(sub(t, v, true), v + 1)
+//      mk(v, b0, b1)
+//    }
+//
+//  def sub(bdd: BDD, v: Int, byTrue: Boolean): BDD = if ((bdd eq TRUE) || (bdd eq FALSE)) bdd
+//  else if (bdd.v == v) {
+//    if (byTrue) bdd.high else bdd.low
+//  } else mk(bdd.v, sub(bdd.low, v, byTrue), sub(bdd.high, v, byTrue))
+//
+//
   def not(bdd: BDD): BDD = lookupCache(notCache, bdd, {
     var rewritten: Map[BDD, BDD] = Map()
 
@@ -137,20 +141,27 @@ class BDDFactory {
       if (b == TRUE) 1 else if (b == FALSE) 0 else Math.abs(b.hashCode)
 
     println("digraph G {")
+    println("x [style=filled, color=\"black\"];")
     println("0 [shape=box, label=\"FALSE\", style=filled, shape=box, height=0.3, width=0.3];")
     println("1 [shape=box, label=\"TRUE\", style=filled, shape=box, height=0.3, width=0.3];")
     var seen: Set[BDD] = Set()
     var queue: Queue[BDD] = Queue() enqueue bdd
+    var bounds: Map[BDD, Int] = Map(bdd->bound)
+
+    println("x -> " + nodeId(bdd) + " [label="+bound+"];")
 
     while (queue.nonEmpty) {
       val (b, newQueue) = queue.dequeue
       queue = newQueue
       if (!(seen contains b) && (b != TRUE) && (b != FALSE)) {
         seen = seen + b
+        val node_bound = bounds(b)
         println(nodeId(b) + " [label=\"v" + features.find(_._2 == b.v).map(_._1).getOrElse("unknown_" + b.v) + "\"];")
-        println(nodeId(b) + " -> " + nodeId(b.low) + " [style=dotted];")
-        println(nodeId(b) + " -> " + nodeId(b.high) + " [style=filled];")
+        println(nodeId(b) + " -> " + nodeId(b.low) + " [style=dotted, label="+node_bound+"];")
+        println(nodeId(b) + " -> " + nodeId(b.high) + " [style=filled, label="+(node_bound-1)+"];")
         queue = queue enqueue b.low enqueue b.high
+        bounds += (b.low -> node_bound)
+        bounds += (b.high -> (node_bound - 1))
       }
 
     }

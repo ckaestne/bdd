@@ -10,7 +10,7 @@ class BDDTest extends FunSuite {
 
 
   test("mk") {
-    val f = new BDDFactory()
+    val f = new BDDFactory(100)
 
     val v1 = f.feature("a").v
     val v2 = f.feature("b").v
@@ -32,27 +32,27 @@ class BDDTest extends FunSuite {
 
   }
 
-  test("build") {
-    val f = new BDDFactory()
-    val v1 = f.feature("a").v
-    val v2 = f.feature("b").v
-
-    val b1 = f.mk(v1, f.TRUE, f.FALSE)
-    val b2 = f.mk(v2, b1, f.FALSE)
-
-    val rebuilt = f.build(b2)
-
-    //    println(b2)
-    //    println(rebuilt)
-
-    assert(rebuilt.v==v1)
-
-
-  }
+//  test("build") {
+//    val f = new BDDFactory(100)
+//    val v1 = f.feature("a").v
+//    val v2 = f.feature("b").v
+//
+//    val b1 = f.mk(v1, f.TRUE, f.FALSE)
+//    val b2 = f.mk(v2, b1, f.FALSE)
+//
+//    val rebuilt = f.build(b2)
+//
+//    //    println(b2)
+//    //    println(rebuilt)
+//
+//    assert(rebuilt.v==v1)
+//
+//
+//  }
 
   test("apply") {
 
-    val f = new BDDFactory()
+    val f = new BDDFactory(100)
 
     val b1 = f.feature("a")
     val b2 = f.feature("b")
@@ -71,7 +71,7 @@ class BDDTest extends FunSuite {
   }
 
   test("logic and issat") {
-    val f = new BDDFactory()
+    val f = new BDDFactory(100)
 
     val a = f.feature("a")
     val b = f.feature("b")
