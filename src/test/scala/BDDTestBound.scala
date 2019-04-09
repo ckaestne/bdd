@@ -204,6 +204,21 @@ class BDDTestBound extends FunSuite {
       }
     }
   }
+
+
+  test("reduceDepth") {
+    val f = new BDDFactory(2)
+    val a = f.feature("a")
+    val b = f.feature("b")
+    val c = f.feature("c")
+
+    assert(f.reduceDepth(1, a and b) == f.FALSE)
+    assert(f.reduceDepth(1, a or b) == (a or b))
+    assert(f.reduceDepth(1, a and b.not) == a)
+    assert(f.reduceDepth(1, (a and c) or (a.not and b and c)) == f.FALSE)
+    assert(f.reduceDepth(1, (a and c) or (a.not and b.not and c)) == (a.not and b.not and c))
+  }
+
 //
 //  test("t") {
 //    val bound = 1

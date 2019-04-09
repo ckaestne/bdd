@@ -133,6 +133,15 @@ class BDDFactory(bound: Int) {
   })
 
 
+  private[bdd] def reduceDepth(depth: Int, bdd: BDD): BDD =
+    if (isTerminal(bdd)) bdd
+    else if (depth <= 0) reduceDepth(depth, bdd.low)
+    else {
+      val lowNew = reduceDepth(depth, bdd.low)
+      val highNew = reduceDepth(depth - 1, bdd.high)
+      if ((lowNew eq bdd.low) && (highNew eq bdd.high)) bdd
+      else mk(bdd.v, lowNew, highNew)
+    }
 
 
 //  def build(t: BDD) = {
