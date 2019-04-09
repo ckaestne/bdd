@@ -53,6 +53,9 @@ class BDDFactory(bound: Int) {
   val OR = new Op {
     override def apply(a: Boolean, b: Boolean) = a || b
   }
+  //  val EQUIV = new Op {
+  //    override def apply(a: Boolean, b: Boolean) = a == b
+  //  }
 
 
   private def lookupCache[K, V<:AnyRef](cache: mutable.WeakHashMap[K, WeakReference[V]], k: K, gen: => V): V = {
@@ -65,20 +68,20 @@ class BDDFactory(bound: Int) {
     }
   }
 
-  def apply(op: Op, u1: BDD, u2: BDD) = lookupCache(opCache, (op, u1, u2), {
-    var cache: Map[(Int, BDD, BDD), BDD] = Map()
+  def equivalent(u1: BDD, u2: BDD): Boolean = {
 
-    def app(depth: Int, u1: BDD, u2: BDD): BDD = {
-      val cached = cache.get((depth, u1, u2))
-      if (cached.nonEmpty)
-        return cached.get
+    def app(depth: Int, u1: BDD, u2: BDD): Boolean = {
+      if (u1 == u2) return true
+      //      val cached = cache.get((depth, u1, u2))
+      //      if (cached.nonEmpty)
+      //        return cached.get
 
-      def mk_(v: Int, low: ()=>BDD, high: ()=>BDD): BDD =
-        if (depth==0) low() else mk(v, low(), high())
+      def mk_(v: Int, low: () => Boolean, high: () => Boolean): Boolean =
+        if (depth == 0) low() else low() && high()
 
       val u =
         if (isTerminal(u1) && isTerminal(u2))
-          if (op(u1 eq TRUE, u2 eq TRUE)) TRUE else FALSE
+          u1 == u2
         else if (isTerminal(u2))
           mk_(u1.v, ()=>app(depth, u1.low, u2), ()=>app(depth-1, u1.high, u2))
         else if (isTerminal(u1))
@@ -90,13 +93,44 @@ class BDDFactory(bound: Int) {
         else //if (u1.v==u2.v)
           mk_(u1.v, ()=>app(depth,u1.low, u2.low), ()=>app(depth-1,u1.high, u2.high))
 
+      //      cache += ((depth, u1, u2) -> u)
+      u
+    }
+
+    app(bound, u1, u2)
+  }
+
+  def apply(op: Op, u1: BDD, u2: BDD): BDD = lookupCache(opCache, (op, u1, u2), {
+    var cache: Map[(Int, BDD, BDD), BDD] = Map()
+
+    def app(depth: Int, u1: BDD, u2: BDD): BDD = {
+      val cached = cache.get((depth, u1, u2))
+      if (cached.nonEmpty)
+        return cached.get
+
+      def mk_(v: Int, low: () => BDD, high: () => BDD): BDD =
+        if (depth == 0) low() else mk(v, low(), high())
+
+      val u =
+        if (isTerminal(u1) && isTerminal(u2))
+          if (op(u1 eq TRUE, u2 eq TRUE)) TRUE else FALSE
+        else if (isTerminal(u2))
+          mk_(u1.v, () => app(depth, u1.low, u2), () => app(depth - 1, u1.high, u2))
+        else if (isTerminal(u1))
+          mk_(u2.v, () => app(depth, u1, u2.low), () => app(depth - 1, u1, u2.high))
+        else if (u1.v < u2.v)
+          mk_(u1.v, () => app(depth, u1.low, u2), () => app(depth - 1, u1.high, u2))
+        else if (u1.v > u2.v)
+          mk_(u2.v, () => app(depth, u1, u2.low), () => app(depth - 1, u1, u2.high))
+        else //if (u1.v==u2.v)
+          mk_(u1.v, () => app(depth, u1.low, u2.low), () => app(depth - 1, u1.high, u2.high))
+
       cache += ((depth, u1, u2) -> u)
       u
     }
 
     app(bound, u1, u2)
   })
-
 
 
 

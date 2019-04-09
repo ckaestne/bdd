@@ -25,6 +25,11 @@ class BDD(val v: Int, val low: BDD, val high: BDD, private val factory: BDDFacto
     this.factory.apply(this.factory.OR, this, that)
   }
 
+  def equivalentTo(that: BDD): Boolean =
+    this == that ||
+      this.factory.equivalent(this, that)
+
+
   def not(): BDD = factory.not(this)
 
   def isSatisfiable(): Boolean = true
