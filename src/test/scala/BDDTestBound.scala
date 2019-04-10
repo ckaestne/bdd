@@ -186,7 +186,8 @@ class BDDTestBound extends FunSuite {
     }
   }
 
-  test("all expressions with same truth table within bound are also equivalent") {
+  ignore("all expressions with same truth table within bound are also equivalent") {
+    //ignored because this is a weaker property than being canonical, checked above
     for (bound <- List(1, 2, 3, 4)) {
       println(s"checking bound $bound")
       val f = new BDDFactory(bound)
