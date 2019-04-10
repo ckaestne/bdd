@@ -9,11 +9,14 @@ class BDDFactory(bound: Int) {
 
   val TRUE = new BDD(-1, null, null, this) {
     override def toString = "true"
+
     override def isTautology(): Boolean = true
   }
   val FALSE = new BDD(-2, null, null, this) {
     override def toString = "false"
+
     override def isSatisfiable() = false
+
     override def isContradiction(): Boolean = true
   }
 
@@ -23,6 +26,7 @@ class BDDFactory(bound: Int) {
 
 
   private[bdd] var features: mutable.Map[String, Int] = mutable.Map()
+
   def varNum = features.size
 
   private def getFeatureId(s: String) =
@@ -58,7 +62,7 @@ class BDDFactory(bound: Int) {
   //  }
 
 
-  private def lookupCache[K, V<:AnyRef](cache: mutable.WeakHashMap[K, WeakReference[V]], k: K, gen: => V): V = {
+  private def lookupCache[K, V <: AnyRef](cache: mutable.WeakHashMap[K, WeakReference[V]], k: K, gen: => V): V = {
     val v = cache.get(k).flatMap(_.get)
     if (v.isDefined) v.get
     else {
@@ -83,15 +87,15 @@ class BDDFactory(bound: Int) {
         if (isTerminal(u1) && isTerminal(u2))
           u1 == u2
         else if (isTerminal(u2))
-          mk_(u1.v, ()=>app(depth, u1.low, u2), ()=>app(depth-1, u1.high, u2))
+          mk_(u1.v, () => app(depth, u1.low, u2), () => app(depth - 1, u1.high, u2))
         else if (isTerminal(u1))
-          mk_(u2.v, ()=>app(depth, u1, u2.low), ()=>app(depth-1, u1, u2.high))
+          mk_(u2.v, () => app(depth, u1, u2.low), () => app(depth - 1, u1, u2.high))
         else if (u1.v < u2.v)
-          mk_(u1.v, ()=>app(depth,u1.low, u2), ()=>app(depth-1,u1.high, u2))
+          mk_(u1.v, () => app(depth, u1.low, u2), () => app(depth - 1, u1.high, u2))
         else if (u1.v > u2.v)
-          mk_(u2.v, ()=>app(depth,u1, u2.low), ()=>app(depth-1,u1, u2.high))
+          mk_(u2.v, () => app(depth, u1, u2.low), () => app(depth - 1, u1, u2.high))
         else //if (u1.v==u2.v)
-          mk_(u1.v, ()=>app(depth,u1.low, u2.low), ()=>app(depth-1,u1.high, u2.high))
+          mk_(u1.v, () => app(depth, u1.low, u2.low), () => app(depth - 1, u1.high, u2.high))
 
       //      cache += ((depth, u1, u2) -> u)
       u
@@ -109,7 +113,14 @@ class BDDFactory(bound: Int) {
         return cached.get
 
       def mk_(v: Int, low: () => BDD, high: () => BDD): BDD =
-        if (depth == 0) low() else mk(v, low(), high())
+        if (depth == 0) low() else {
+          val l = low()
+          val rl = reduceDepth(depth - 1, l)
+          val h = high()
+          if (h eq rl) l
+          else
+            mk(v, l, h)
+        }
 
       val u =
         if (isTerminal(u1) && isTerminal(u2))
@@ -133,35 +144,51 @@ class BDDFactory(bound: Int) {
   })
 
 
-  private[bdd] def reduceDepth(depth: Int, bdd: BDD): BDD =
-    if (isTerminal(bdd)) bdd
-    else if (depth <= 0) reduceDepth(depth, bdd.low)
-    else {
-      val lowNew = reduceDepth(depth, bdd.low)
-      val highNew = reduceDepth(depth - 1, bdd.high)
-      if ((lowNew eq bdd.low) && (highNew eq bdd.high)) bdd
-      else mk(bdd.v, lowNew, highNew)
+  private[bdd] def reduceDepth(depth: Int, bdd: BDD): BDD = {
+    var cache: Map[(Int, BDD), BDD] = Map()
+
+    def red(depth: Int, bdd: BDD): BDD = {
+      val cached = cache.get((depth, bdd))
+      if (cached.nonEmpty)
+        return cached.get
+
+      val r = if (isTerminal(bdd)) bdd
+      else if (depth <= 0) reduceDepth(depth, bdd.low)
+      else {
+        val lowNew = reduceDepth(depth, bdd.low)
+        val highNew = reduceDepth(depth - 1, bdd.high)
+        val lowNewReduced = reduceDepth(depth - 1, bdd.low)
+        if (lowNewReduced eq highNew) lowNew
+        else if ((lowNew eq bdd.low) && (highNew eq bdd.high)) bdd
+        else mk(bdd.v, lowNew, highNew)
+
+      }
+      cache += ((depth, bdd) -> r)
+      r
     }
 
+    red(depth, bdd)
+  }
 
-//  def build(t: BDD) = {
-//    build_(t, 0)
-//  }
-//
-//  private def build_(t: BDD, v: Int): BDD =
-//    if ((v >= features.size) || (t eq TRUE) || (t eq FALSE)) t
-//    else {
-//      val b0 = build_(sub(t, v, false), v + 1)
-//      val b1 = build_(sub(t, v, true), v + 1)
-//      mk(v, b0, b1)
-//    }
-//
-//  def sub(bdd: BDD, v: Int, byTrue: Boolean): BDD = if ((bdd eq TRUE) || (bdd eq FALSE)) bdd
-//  else if (bdd.v == v) {
-//    if (byTrue) bdd.high else bdd.low
-//  } else mk(bdd.v, sub(bdd.low, v, byTrue), sub(bdd.high, v, byTrue))
-//
-//
+
+  //  def build(t: BDD) = {
+  //    build_(t, 0)
+  //  }
+  //
+  //  private def build_(t: BDD, v: Int): BDD =
+  //    if ((v >= features.size) || (t eq TRUE) || (t eq FALSE)) t
+  //    else {
+  //      val b0 = build_(sub(t, v, false), v + 1)
+  //      val b1 = build_(sub(t, v, true), v + 1)
+  //      mk(v, b0, b1)
+  //    }
+  //
+  //  def sub(bdd: BDD, v: Int, byTrue: Boolean): BDD = if ((bdd eq TRUE) || (bdd eq FALSE)) bdd
+  //  else if (bdd.v == v) {
+  //    if (byTrue) bdd.high else bdd.low
+  //  } else mk(bdd.v, sub(bdd.low, v, byTrue), sub(bdd.high, v, byTrue))
+  //
+  //
   def not(bdd: BDD): BDD = lookupCache(notCache, bdd, {
     var rewritten: Map[BDD, BDD] = Map()
 
@@ -189,9 +216,9 @@ class BDDFactory(bound: Int) {
     println("1 [shape=box, label=\"TRUE\", style=filled, shape=box, height=0.3, width=0.3];")
     var seen: Set[BDD] = Set()
     var queue: Queue[BDD] = Queue() enqueue bdd
-    var bounds: Map[BDD, Int] = Map(bdd->bound)
+    var bounds: Map[BDD, Int] = Map(bdd -> bound)
 
-    println("x -> " + nodeId(bdd) + " [label="+bound+"];")
+    println("x -> " + nodeId(bdd) + " [label=" + bound + "];")
 
     while (queue.nonEmpty) {
       val (b, newQueue) = queue.dequeue
@@ -200,8 +227,8 @@ class BDDFactory(bound: Int) {
         seen = seen + b
         val node_bound = bounds(b)
         println(nodeId(b) + " [label=\"v" + features.find(_._2 == b.v).map(_._1).getOrElse("unknown_" + b.v) + "\"];")
-        println(nodeId(b) + " -> " + nodeId(b.low) + " [style=dotted, label="+node_bound+"];")
-        println(nodeId(b) + " -> " + nodeId(b.high) + " [style=filled, label="+(node_bound-1)+"];")
+        println(nodeId(b) + " -> " + nodeId(b.low) + " [style=dotted, label=" + node_bound + "];")
+        println(nodeId(b) + " -> " + nodeId(b.high) + " [style=filled, label=" + (node_bound - 1) + "];")
         queue = queue enqueue b.low enqueue b.high
         bounds += (b.low -> node_bound)
         bounds += (b.high -> (node_bound - 1))
